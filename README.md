@@ -14,7 +14,7 @@
 - Создание новой папки и добавление нужного скрипта в нее через кнопку Create Folder and Add File.
 - Добавление файлов с расширением json, session, py в любую папку на системе через кнопку Add File to Folder.
 - Удаление скрипта с базы бота (не будет подлежать замене, запуском/перезапуском и автозапуску, удаляется из системы управления) через кнопку Remove the script from the bot
-- Распаковка ZIP-архива в папку с bot.py. Чтобы отправлять архивы больше двух МБ нужно иметь свой telegram-bot-api (Локальный сервер тг) https://github.com/tdlib/telegram-bot-api, в коде показан пример как подвязать сервер к боту.
+- Распаковка ZIP-архива в папку с bot.py. Чтобы отправлять архивы больше 20 МБ нужно иметь свой telegram-bot-api (Локальный сервер тг) https://github.com/tdlib/telegram-bot-api, в коде показан пример как подвязать сервер к боту.
 
 
 I have implemented a tool for managing bots that provides full control over Python scripts via a Telegram Bot.
@@ -31,4 +31,4 @@ Supervisor features:
 - Create a new folder and add a script to it using the "Create Folder and Add File" button
 - Add files with extensions .json, .session, .py to any folder on the system using the "Add File to Folder" button
 - Remove a script from the bot database (it will no longer be subject to replacement, startup/restart, and autostart; it is removed from the management system) using the "Remove the script from the bot" button
-- Unpack ZIP archives into the folder with bot.py. To send archives larger than 2 MB, you need your own Telegram Bot API (local Telegram server): https://github.com/tdlib/telegram-bot-api. The code includes an example of how to connect the bot to a local server.
+- Unpack ZIP archives into the folder with bot.py. To send archives larger than 20 MB, you need your own Telegram Bot API (local Telegram server): https://github.com/tdlib/telegram-bot-api. The code includes an example of how to connect the bot to a local server.
