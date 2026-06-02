@@ -97,7 +97,6 @@ async def start_script(script: str):
 
 	log_event(script, "STARTED")
 
-	# stream tasks
 	tasks[script].extend([
 		asyncio.create_task(stream_reader(proc.stdout, script, "stdout")),
 		asyncio.create_task(stream_reader(proc.stderr, script, "stderr"))
@@ -129,10 +128,8 @@ async def stop_script(script: str):
 
 	log_event(script, "STOPPED")
 
-	# cleanup process
 	processes.pop(script, None)
 
-	# cancel stream tasks
 	for t in tasks.get(script, []):
 		t.cancel()
 
@@ -212,7 +209,6 @@ async def monitor_script(script: str, notify_func=None):
 
 			continue
 
-		# backoff anti-spam restart
 		backoff = min(2 ** len(history), 30)
 		await asyncio.sleep(backoff)
 
