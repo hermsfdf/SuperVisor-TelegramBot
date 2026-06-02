@@ -1,5 +1,3 @@
-# supervisor.py
-
 import asyncio
 import sys
 import json
@@ -10,7 +8,7 @@ from collections import defaultdict, deque
 from config import RESTART_LIMIT, RESTART_WINDOW, CHECK_DELAY
 
 processes = {}
-tasks = {}
+tasks = defaultdict(list)
 manual_stopped = set()
 
 restart_history = defaultdict(deque)
@@ -26,6 +24,7 @@ stats = defaultdict(lambda: {
 })
 
 os.makedirs("logs", exist_ok=True)
+
 
 def write_json_log(script: str, data: dict):
 	safe_name = script.replace(":", "_").replace("\\", "_").replace("/", "_")
@@ -53,37 +52,37 @@ def log_event(script: str, status: str, auto=False, error=None):
 async def stream_reader(stream, script, stream_type):
 	while True:
 		line = await stream.readline()
-
 		if not line:
 			break
 
 		text = line.decode(errors="ignore").rstrip()
 
-		log_data = {
+		write_json_log(script, {
 			"Script": script,
 			"Type": stream_type,
 			"Time": time.strftime("%Y-%m-%d %H:%M:%S"),
 			"Message": text
-		}
-
-		write_json_log(script, log_data)
+		})
 
 		if stream_type == "stderr":
 			stats[script]["last_error"] = text
 
 		print(f"[{script}][{stream_type}] {text}")
 
+
 async def start_script(script: str):
 	if script in processes:
 		proc = processes[script]
-
 		if proc.returncode is None:
 			return
+
+	if not os.path.exists(script):
+		print(f"[ERROR] File not found: {script}")
+		return
 
 	proc = await asyncio.create_subprocess_exec(
 		sys.executable,
 		script,
-
 		stdout=asyncio.subprocess.PIPE,
 		stderr=asyncio.subprocess.PIPE
 	)
@@ -98,15 +97,15 @@ async def start_script(script: str):
 
 	log_event(script, "STARTED")
 
-	asyncio.create_task(stream_reader(proc.stdout, script, "stdout"))
-	asyncio.create_task(stream_reader(proc.stderr, script, "stderr"))
+	# stream tasks
+	tasks[script].extend([
+		asyncio.create_task(stream_reader(proc.stdout, script, "stdout")),
+		asyncio.create_task(stream_reader(proc.stderr, script, "stderr"))
+	])
 
 	print(f"[START] {script} PID={proc.pid}")
 
-async def script_read(script_path: str):
-	with open(script_path, "r", encoding="utf-8") as f:
-		text = f.read()
-	return text
+
 async def stop_script(script: str):
 	proc = processes.get(script)
 
@@ -127,12 +126,20 @@ async def stop_script(script: str):
 
 	log_event(script, "STOPPED")
 
+	# cleanup process
+	processes.pop(script, None)
+
+	# cancel stream tasks
+	for t in tasks.get(script, []):
+		t.cancel()
+
+	tasks[script] = []
+
 	print(f"[STOP] {script}")
 
 
 async def restart_script(script: str, auto=False):
 	await stop_script(script)
-
 	await asyncio.sleep(1)
 
 	if auto:
@@ -144,8 +151,8 @@ async def restart_script(script: str, auto=False):
 
 	await start_script(script)
 
-async def monitor_script(script: str, notify_func=None):
 
+async def monitor_script(script: str, notify_func=None):
 	while True:
 
 		if script in manual_stopped:
@@ -172,17 +179,11 @@ async def monitor_script(script: str, notify_func=None):
 
 		error = stats[script]["last_error"]
 
-		log_event(
-			script,
-			f"CRASHED (code={code})",
-			auto=True,
-			error=error
-		)
+		log_event(script, f"CRASHED (code={code})", auto=True, error=error)
 
 		print(f"[CRASH] {script} CODE={code}")
 
 		now = time.time()
-
 		history = restart_history[script]
 
 		while history and now - history[0] > RESTART_WINDOW:
@@ -191,51 +192,36 @@ async def monitor_script(script: str, notify_func=None):
 		history.append(now)
 
 		if len(history) >= RESTART_LIMIT:
-
 			stats[script]["status"] = "FAILED_LIMIT"
 
-			log_event(
-				script,
-				"DISABLED (too many crashes)",
-				auto=True
-			)
+			log_event(script, "DISABLED (too many crashes)", auto=True)
 
-			print(f"[DISABLED] {script}")
+			restart_history.pop(script, None)
+			manual_stopped.add(script)
 
 			if notify_func:
 				try:
 					await notify_func(
-						f"❌ {script} отключён.\n"
-						f"Причина: слишком много авто-перезапусков."
+						f"❌ {script} отключён (слишком много падений)"
 					)
 				except:
 					pass
 
-			manual_stopped.add(script)
-
 			continue
 
-		await asyncio.sleep(3)
+		# backoff anti-spam restart
+		backoff = min(2 ** len(history), 30)
+		await asyncio.sleep(backoff)
 
 		await restart_script(script, auto=True)
 
 
-
-
-async def start_supervisor(
-	scripts: list[str],
-	notify_func=None
-):
-
+async def start_supervisor(scripts: list[str], notify_func=None):
 	for script in scripts:
-
 		await start_script(script)
 
 		task = asyncio.create_task(
-			monitor_script(
-				script,
-				notify_func
-			)
+			monitor_script(script, notify_func)
 		)
 
-		tasks[script] = task
+		tasks[script].append(task)
