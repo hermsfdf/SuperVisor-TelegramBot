@@ -105,7 +105,10 @@ async def start_script(script: str):
 
 	print(f"[START] {script} PID={proc.pid}")
 
-
+def script_read(script_path: str):
+	with open(script_path, "r", encoding="utf-8") as f:
+		return f.read()
+		
 async def stop_script(script: str):
 	proc = processes.get(script)
 
